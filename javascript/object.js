@@ -75,6 +75,16 @@ function merge() {
 }
 //merge();
 
+// Copying symbol-typed properties
+function symb() {
+    var o1 = {a: 1};
+    var o2 = {[Symbol('foo')]: 2};
+    var obj = Object.assign({}, o1, o2);
+    console.log(obj); // { a: 1, [Symbol(foo)]: 2 } (cf. bug 1207182 on Firefox)
+    console.log(Object.getOwnPropertySymbols(obj)); // [ Symbol(foo) ]
+}
+//symb();
+
 // Properties on the prototype chain and non-enumerate properties cannot be copied
 function chain() {
     var obj = Object.create(
@@ -130,37 +140,84 @@ function inter() {
     console.log(target.foo3); // undefined, assign method has finished, foo3 will not be copied.
     console.log(target.baz);  // undefined, the third source will not be copied either.
 }
-inter();
+//inter();
 
+// Copying accessors
+function accessors() {
+    var obj = {
+        foo: 1,
+        get bar() {
+            return 2;
+        }
+    };
 
+    var copy = Object.assign({}, obj);
+    //console.log(copy); // { foo: 1, bar: 2 }, the value of  copy.bar is obj.bar's getter's return value
 
+    // This is an assign function that copies full descriptors
+    function completeAssign(target, ...sources) {
+        sources.forEach(source => {
+            let descriptors = Object.keys(source).reduce((descriptors, key) => {
+                descriptors[key] = Object.getOwnPropertyDescriptor(source, key);
+                return descriptors;
+            }, {});
+            console.log(descriptors);
+            /**
+             *{ foo: { value: 1, writable: true, enumerable: true, configurable: true },
+             *  bar:
+             *   { get: [Function: get bar],
+             *     set: undefined,
+             *     enumerable: true,
+             *     configurable: true } }
+             *
+             */
 
+            // by default, Object.assign copies enumerable Symbols too
+            console.log(Object.getOwnPropertySymbols(source)); //
+            Object.getOwnPropertySymbols(source).forEach(sym => {
+                let descriptor = Object.getOwnPropertyDescriptor(source, sym);
+                if (descriptor.enumerable) {
+                    descriptors[sym] = descriptor;
+                }
+            });
 
+            Object.defineProperties(target, descriptors);
+        });
+        return target;
+    }
 
+    var copy = completeAssign({}, obj);
+    console.log(copy); // { foo: 1, bar: [Getter] }
+}
+//accessors();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Polyfill
+// This polyfill doesn't support symbol properties, since ES5 doesn't have symbols anyway:
+function polyfill() {
+    if (typeof Object.assign != 'function') {
+        // Must be writable: true, enumerable: false, configurable: true
+        Object.defineProperty(Object, "assign", {
+            value: function assign(target, varArgs) { // .length of function is 2
+                'use strict';
+                if (target == null) { // TypeError if undefined or null
+                    throw new TypeError('Cannot convert undefined or null to object');
+                }
+                var to = Object(target);
+                for (var index = 1; index < arguments.length; index++) {
+                    var nextSource = arguments[index];
+                    if (nextSource != null) { // Skip over if undefined or null
+                        for (var nextKey in nextSource) {
+                            // Avoid bugs when hasOwnProperty is shadowed
+                            if (Object.prototype.hasOwnProperty.call(nextSource, nextKey)) {
+                                to[nextKey] = nextSource[nextKey];
+                            }
+                        }
+                    }
+                }
+                return to;
+            },
+            writable: true,
+            configurable: true
+        });
+    }
+}
