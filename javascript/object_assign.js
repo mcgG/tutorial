@@ -221,5 +221,5 @@ function polyfill() {
         });
     }
 }
-console.log(Object.getOwnPropertyNames(polyfill));
-console.log(Object.getOwnPropertyNames(()=>{}));
+//console.log(Object.getOwnPropertyNames(polyfill));
+//console.log(Object.getOwnPropertyNames(()=>{}));
